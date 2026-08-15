@@ -120,7 +120,13 @@ describe('registerPtyHandlers', () => {
     expect(sshAList).toHaveBeenCalledOnce()
     expect(sshBList).not.toHaveBeenCalled()
 
-    await expect(controller.listProcesses()).rejects.toThrow('ssh-b unavailable')
+    // STA-517: the aggregate used to propagate ssh-b's failure, which cost the runtime the
+    // whole liveness inventory — so no PTY was ever proven dead and mobile kept every
+    // retained pane "active". One unreachable relay now drops out of the answer instead.
+    await expect(controller.listProcesses()).resolves.toEqual([
+      { id: 'local-pty', title: 'Local', cwd: '/local' },
+      { id: 'ssh-a-pty' }
+    ])
   })
   it('returns unavailable runtime confirmation for unsupported or missing providers', async () => {
     registerSshPtyProvider('ssh-1', {} as never)

@@ -264,20 +264,40 @@ function registeredPtyProviders(): RegisteredPtyProvider[] {
   ]
 }
 
-async function listRegisteredPtyProcessesWithHostScope(): Promise<{
+// Why: one unreachable relay must not decide liveness for every other provider.
+// Promise.all failed the whole aggregate on a single SSH rejection, and an
+// unanswered relay list runs to the mux's 30s default — far past the caller's
+// budget — so the runtime kept losing the inventory it needs to retire exited
+// PTYs and every retained pane stayed "active" (STA-517). Settle each SSH
+// provider on its own and bound it by the caller's deadline; a provider that
+// does not answer is unknown, not empty — it drops out of `hostIds` so the
+// listing never claims coverage it lacks, and the runtime's hasPty rescue keeps
+// its panes. A local failure still fails the aggregate, matching pty:listSessions.
+async function listRegisteredPtyProcessesWithHostScope(opts?: {
+  deadlineMs?: number
+}): Promise<{
   processes: PtyProcessInfo[]
   hostIds: ExecutionHostId[]
 }> {
   const providers = registeredPtyProviders()
   const providerSessions = await Promise.all(
-    providers.map(({ provider }) => provider.listProcesses())
-  )
-  return {
-    processes: providerSessions.flat(),
-    hostIds: providers.map(({ connectionId }) =>
-      connectionId ? toSshExecutionHostId(connectionId) : LOCAL_EXECUTION_HOST_ID
+    providers.map(({ provider, connectionId }) =>
+      connectionId === null
+        ? provider.listProcesses()
+        : provider.listProcesses(opts).catch((): PtyProcessInfo[] | null => null)
     )
-  }
+  )
+  const processes: PtyProcessInfo[] = []
+  const hostIds: ExecutionHostId[] = []
+  providers.forEach(({ connectionId }, index) => {
+    const sessions = providerSessions[index]
+    if (!sessions) {
+      return
+    }
+    processes.push(...sessions)
+    hostIds.push(connectionId ? toSshExecutionHostId(connectionId) : LOCAL_EXECUTION_HOST_ID)
+  })
+  return { processes, hostIds }
 }
 
 const SYNTHETIC_KILL_EXIT_DUPLICATE_WINDOW_MS = 30_000
@@ -5761,14 +5781,14 @@ export function registerPtyHandlers(
         return null
       }
     },
-    listProcesses: async (connectionId) => {
+    listProcesses: async (connectionId, opts) => {
       if (connectionId === null) {
         return localProvider.listProcesses()
       }
       if (connectionId !== undefined) {
-        return getProvider(connectionId).listProcesses()
+        return getProvider(connectionId).listProcesses(opts)
       }
-      return (await listRegisteredPtyProcessesWithHostScope()).processes
+      return (await listRegisteredPtyProcessesWithHostScope(opts)).processes
     },
     listProcessesWithHostScope: listRegisteredPtyProcessesWithHostScope,
     serializeBuffer: (ptyId, opts) => {
