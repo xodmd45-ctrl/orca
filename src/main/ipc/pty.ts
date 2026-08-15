@@ -273,9 +273,7 @@ function registeredPtyProviders(): RegisteredPtyProvider[] {
 // does not answer is unknown, not empty — it drops out of `hostIds` so the
 // listing never claims coverage it lacks, and the runtime's hasPty rescue keeps
 // its panes. A local failure still fails the aggregate, matching pty:listSessions.
-async function listRegisteredPtyProcessesWithHostScope(opts?: {
-  deadlineMs?: number
-}): Promise<{
+async function listRegisteredPtyProcessesWithHostScope(opts?: { deadlineMs?: number }): Promise<{
   processes: PtyProcessInfo[]
   hostIds: ExecutionHostId[]
 }> {
