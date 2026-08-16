@@ -99,6 +99,26 @@ export type MailboxRoutingPage = {
 export type ForeignDirectMailboxRoutingPage = MailboxRoutingPage & {
   mailboxes: { mailboxHandle: string; types: MessageType[] }[]
 }
+
+export type LegacyAdoptedMailboxOwner = {
+  runId: string
+  terminalHandle: string
+}
+
+export type MessageInsert = {
+  id?: string
+  from: string
+  to: string
+  subject: string
+  body?: string
+  type?: MessageType
+  priority?: MessagePriority
+  threadId?: string
+  payload?: string
+  senderPaneKey?: string
+  runId?: string
+  deliveryContract?: MessageDeliveryContract
+}
 // Why: indexable pre-filter for isEquivalentPaneKey — equal strings and equal leaves both share the
 // text after the first ':', so this narrows candidates without deciding equivalence itself.
 const RUN_PANE_KEY_MATCH_SUFFIX_SQL =
@@ -2560,6 +2580,40 @@ export class OrchestrationDb {
     return run ? exposeRunTimestamps(run) : undefined
   }
 
+  getLegacyAdoptedRunMailboxOwner(): LegacyAdoptedMailboxOwner | null {
+    const adoption = this.getLegacyAdoption()
+    if (!adoption) {
+      return null
+    }
+    const terminalHandle = this.getUniqueLegacyCoordinatorHandle(adoption.adopted_run_id)
+    return terminalHandle ? { runId: adoption.adopted_run_id, terminalHandle } : null
+  }
+
+  getRunMailboxOwnerIdsForHandle(
+    terminalHandle: string,
+    legacyAdoptedMailboxOwner?: LegacyAdoptedMailboxOwner | null
+  ): string[] {
+    const runIds = (
+      this.db
+        .prepare(
+          `SELECT coordinator.run_id
+           FROM run_coordinator_handles AS coordinator
+           JOIN runs ON runs.id = coordinator.run_id AND runs.legacy = 0
+           WHERE coordinator.terminal_handle = ?
+           ORDER BY coordinator.run_id`
+        )
+        .all(terminalHandle) as { run_id: string }[]
+    ).map((row) => row.run_id)
+    const adoptedOwner =
+      legacyAdoptedMailboxOwner === undefined
+        ? this.getLegacyAdoptedRunMailboxOwner()
+        : legacyAdoptedMailboxOwner
+    if (adoptedOwner?.terminalHandle === terminalHandle) {
+      runIds.push(adoptedOwner.runId)
+    }
+    return [...new Set(runIds)].sort()
+  }
+
   listRuns(params: { limit?: number; cursor?: string } = {}): RunListPage {
     if (params.limit === undefined && params.cursor === undefined) {
       const rows = this.db
@@ -2781,15 +2835,14 @@ export class OrchestrationDb {
           .prepare(
             `SELECT DISTINCT assignee_handle AS handle
              FROM dispatch_contexts
-             WHERE run_id = ? AND contract_version = ?
-               AND assignee_handle IS NOT NULL
+             WHERE run_id = ? AND assignee_handle IS NOT NULL
              UNION
              SELECT DISTINCT terminal_handle AS handle
              FROM legacy_compatibility_principals
              WHERE run_id = ? AND role = 'worker'
                AND status IN ('committed', 'settled')`
           )
-          .all(runId, LEGACY_CONTRACT_VERSION, runId) as { handle: string }[]
+          .all(runId, runId) as { handle: string }[]
       ).map((row) => row.handle)
     )
     const durableRows = this.db
@@ -2805,10 +2858,9 @@ export class OrchestrationDb {
            AND EXISTS(
              SELECT 1 FROM dispatch_contexts d
              WHERE d.task_id = t.id AND d.run_id = t.run_id
-               AND d.contract_version = ?
            )`
       )
-      .all(adoption.adopted_at, runId, adoption.adopted_at, LEGACY_CONTRACT_VERSION) as {
+      .all(adoption.adopted_at, runId, adoption.adopted_at) as {
       handle: string
     }[]
     if (durableRows.some((row) => workerHandles.has(row.handle))) {
@@ -3067,20 +3119,7 @@ export class OrchestrationDb {
 
   // ── Messages ──
 
-  insertMessage(msg: {
-    id?: string
-    from: string
-    to: string
-    subject: string
-    body?: string
-    type?: MessageType
-    priority?: MessagePriority
-    threadId?: string
-    payload?: string
-    senderPaneKey?: string
-    runId?: string
-    deliveryContract?: MessageDeliveryContract
-  }): MessageRow {
+  insertMessage(msg: MessageInsert): MessageRow {
     const runId = msg.runId ?? LEGACY_RUN_ID
     const deliveryContract = msg.deliveryContract ?? 'current_delivery'
     this.requireRun(runId)
@@ -3109,6 +3148,18 @@ export class OrchestrationDb {
     return exposeMessageTimestamps(
       this.db.prepare('SELECT * FROM messages WHERE id = ?').get(id) as MessageRow
     )
+  }
+
+  insertMessages(messages: MessageInsert[]): MessageRow[] {
+    this.db.exec('BEGIN IMMEDIATE')
+    try {
+      const inserted = messages.map((message) => this.insertMessage(message))
+      this.db.exec('COMMIT')
+      return inserted
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
   }
 
   commitLegacyLifecycleOperation(params: {
@@ -7300,6 +7351,45 @@ export class OrchestrationDb {
 
   getActiveDispatchForIdentity(handle: string, paneKey?: string): DispatchContextRow | undefined {
     return this.findActiveDispatchForAssignee(handle, paneKey)
+  }
+
+  getActiveDispatchMailboxOwners(handle: string, paneKey?: string): DispatchContextRow[] {
+    const byHandle = this.db
+      .prepare(
+        `SELECT * FROM dispatch_contexts
+         WHERE assignee_handle = ? AND status IN ('pending', 'dispatched')
+         ORDER BY rowid DESC`
+      )
+      .all(handle) as DispatchContextRow[]
+    if (byHandle.length > 0 || !paneKey) {
+      return byHandle
+    }
+
+    const byExactPane = this.db
+      .prepare(
+        `SELECT * FROM dispatch_contexts
+         WHERE assignee_pane_key = ? AND status IN ('pending', 'dispatched')
+         ORDER BY rowid DESC`
+      )
+      .all(paneKey) as DispatchContextRow[]
+    if (byExactPane.length > 0 || !parsePaneKey(paneKey)) {
+      return byExactPane
+    }
+    return (
+      this.db
+        .prepare(
+          `SELECT * FROM dispatch_contexts
+           WHERE assignee_pane_key IS NOT NULL
+             AND status IN ('pending', 'dispatched') AND instr(assignee_pane_key, ':') > 1
+             AND ${DISPATCH_PANE_KEY_MATCH_SUFFIX_SQL} = ?
+           ORDER BY rowid DESC`
+        )
+        .all(paneKeyMatchSuffix(paneKey)) as DispatchContextRow[]
+    ).filter(
+      (dispatch) =>
+        dispatch.assignee_pane_key !== null &&
+        isEquivalentPaneKey(dispatch.assignee_pane_key, paneKey)
+    )
   }
 
   private findActiveDispatchForAssignee(
