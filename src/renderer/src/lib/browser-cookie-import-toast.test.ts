@@ -49,6 +49,12 @@ const remoteTarget = {
   executionHostLabel: 'Remote Mac'
 }
 
+const windowsTarget = {
+  profileId: 'default',
+  executionHostId: 'local' as const,
+  executionHostLabel: 'Local Windows'
+}
+
 describe('emitBrowserCookieImportToast', () => {
   beforeEach(() => {
     clearBrowserProfileGoogleCookiesMock.mockReset().mockResolvedValue(true)
@@ -83,6 +89,27 @@ describe('emitBrowserCookieImportToast', () => {
 
     expect(successToastMock).toHaveBeenCalledWith('Imported 3 cookies.')
     expect(warningToastMock).not.toHaveBeenCalled()
+  })
+
+  it('offers the in-app file import without recommending an exporter', () => {
+    emitBrowserCookieImportToast(
+      {
+        ...summary,
+        warning: {
+          code: 'cookies-undecryptable',
+          failedCookies: 3,
+          reason: 'app-bound-encryption'
+        }
+      },
+      'Imported 0 cookies.',
+      windowsTarget
+    )
+
+    const message = warningToastMock.mock.calls[0]?.[0]
+    expect(message).toBe(
+      "Orca cannot decrypt 3 of this browser's cookies because they use app-bound encryption. You can import cookies from a file using “From File…”."
+    )
+    expect(message).not.toContain('export')
   })
 
   it('shows the recovery action when the target profile contains Google cookies', async () => {
