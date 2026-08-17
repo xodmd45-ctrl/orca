@@ -87,7 +87,8 @@ import type { StartupCommandDelivery } from '../../shared/codex-startup-delivery
 import {
   SSH_SESSION_EXPIRED_ERROR,
   isSshPtyIdentityMismatchError,
-  isSshPtyNotFoundError
+  isSshPtyNotFoundError,
+  isSshPtyRestoreRequiredError
 } from '../providers/ssh-pty-errors'
 import { parseAppSshPtyId, toAppSshPtyId, toRelaySshPtyId } from '../providers/ssh-pty-id'
 import { createPtySpawnTiming } from './pty-spawn-timing'
@@ -5148,6 +5149,15 @@ export function registerPtyHandlers(
               store?.markSshRemotePtyLease(args.connectionId, effectiveSessionRelayId, 'expired')
             }
           }
+          if (
+            args.connectionId &&
+            effectiveSessionRelayId !== undefined &&
+            (isSshPtyRestoreRequiredError(spawnError) || isSshPtyRestoreRequiredError(rawMessage))
+          ) {
+            // Why: the relay lost delivery, not the PTY; keep the lease reattachable so the next
+            // attach recovers the live remote session instead of cold-starting a duplicate over it.
+            store?.markSshRemotePtyLease(args.connectionId, effectiveSessionRelayId, 'detached')
+          }
           if (isNewDaemonSession && sessionId !== undefined) {
             clearProviderPtyState(sessionId)
           }
@@ -6701,6 +6711,15 @@ export function registerPtyHandlers(
             if (!isIdentityMismatch) {
               store?.markSshRemotePtyLease(args.connectionId, effectiveSessionRelayId, 'expired')
             }
+          }
+          if (
+            args.connectionId &&
+            effectiveSessionRelayId !== undefined &&
+            (isSshPtyRestoreRequiredError(spawnError) || isSshPtyRestoreRequiredError(rawMessage))
+          ) {
+            // Why: the relay lost delivery, not the PTY; keep the lease reattachable so the next
+            // attach recovers the live remote session instead of cold-starting a duplicate over it.
+            store?.markSshRemotePtyLease(args.connectionId, effectiveSessionRelayId, 'detached')
           }
           // Why: provider state buildPtyHostEnv materialized for this minted id leaks if spawn failed.
           if (isMintedSessionId && effectiveSessionId !== undefined) {
