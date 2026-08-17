@@ -83,14 +83,20 @@ async function emitGoogleCookieImportWarning(
     'Clear Google cookies'
   )
   let toastId: string | number | undefined
+  let clearPending = false
   const clearAction = hasGoogleCookies
     ? {
         action: {
           label: clearGoogleCookiesLabel,
           // Why: sonner dismisses the toast on action click, so declining the confirmation would
-          // destroy the only entry point to the recovery. Hold the toast until the clear runs.
+          // destroy the only entry point to the recovery. Hold the toast until the clear succeeds;
+          // because it survives, guard against a second click stacking a second prompt.
           onClick: (event: ReactMouseEvent<HTMLButtonElement>) => {
             event.preventDefault()
+            if (clearPending) {
+              return
+            }
+            clearPending = true
             void target
               .confirm({
                 title: translate(
@@ -135,6 +141,9 @@ async function emitGoogleCookieImportWarning(
                       )
                     }
                   })
+              })
+              .finally(() => {
+                clearPending = false
               })
           }
         }

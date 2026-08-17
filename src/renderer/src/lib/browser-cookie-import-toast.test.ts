@@ -236,6 +236,33 @@ describe('emitBrowserCookieImportToast', () => {
     expect(dismissToastMock).toHaveBeenCalledWith('google-cookie-toast')
   })
 
+  it('does not stack a second confirmation while one is already open', async () => {
+    let resolveConfirm: (confirmed: boolean) => void = () => undefined
+    confirmMock.mockReturnValue(
+      new Promise<boolean>((resolve) => {
+        resolveConfirm = resolve
+      })
+    )
+    emitBrowserCookieImportToast(
+      { ...summary, googleCookiesSkipped: 1 },
+      'Imported 3 cookies.',
+      remoteTarget
+    )
+
+    await vi.waitFor(() => expect(warningToastMock).toHaveBeenCalledOnce())
+    clickToastAction()
+    clickToastAction()
+
+    await flushPendingWork()
+    expect(confirmMock).toHaveBeenCalledOnce()
+
+    resolveConfirm(false)
+    await flushPendingWork()
+    clickToastAction()
+    await flushPendingWork()
+    expect(confirmMock).toHaveBeenCalledTimes(2)
+  })
+
   it('keeps Google cookies and the recovery toast when the user cancels the confirmation', async () => {
     confirmMock.mockResolvedValue(false)
     emitBrowserCookieImportToast(
