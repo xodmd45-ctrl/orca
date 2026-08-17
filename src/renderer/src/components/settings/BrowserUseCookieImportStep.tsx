@@ -4,6 +4,7 @@ import { emitBrowserCookieImportToast } from '@/lib/browser-cookie-import-toast'
 import { cn } from '@/lib/utils'
 import { Button } from '../ui/button'
 import { BrowserCookieImportDisclosure } from '../BrowserCookieImportDisclosure'
+import { useConfirmationDialog } from '../confirmation-dialog-context'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -37,6 +38,7 @@ export function BrowserUseCookieImportStep({
   onConfigureMoreBrowsers
 }: BrowserUseCookieImportStepProps): React.JSX.Element {
   const detectedBrowsers = useAppStore((s) => s.detectedBrowsers)
+  const confirm = useConfirmationDialog()
   const fetchDetectedBrowsers = useAppStore((s) => s.fetchDetectedBrowsers)
 
   const handleImportFromBrowser = async (
@@ -63,7 +65,8 @@ export function BrowserUseCookieImportStep({
         {
           profileId,
           executionHostId: result.executionHostId,
-          executionHostLabel: result.executionHostLabel
+          executionHostLabel: result.executionHostLabel,
+          confirm
         }
       )
     } else {
@@ -84,7 +87,8 @@ export function BrowserUseCookieImportStep({
         {
           profileId: 'default',
           executionHostId: result.executionHostId,
-          executionHostLabel: result.executionHostLabel
+          executionHostLabel: result.executionHostLabel,
+          confirm
         }
       )
     } else if (result.reason !== 'canceled') {

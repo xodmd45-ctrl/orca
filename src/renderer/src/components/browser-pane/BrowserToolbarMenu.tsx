@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 import { emitBrowserCookieImportToast } from '@/lib/browser-cookie-import-toast'
 import { useAppStore } from '@/store'
 import { useMountedRef } from '@/hooks/useMountedRef'
+import { useConfirmationDialog } from '@/components/confirmation-dialog-context'
 import { shouldShowBrowserImportHint } from './browser-import-hint-visibility'
 import type { BrowserViewportPresetId } from '../../../../shared/browser-workspace-types'
 import {
@@ -31,6 +32,7 @@ export function BrowserToolbarMenu({
   isActive
 }: BrowserToolbarMenuProps): React.JSX.Element {
   const browserSessionProfiles = useAppStore((s) => s.browserSessionProfiles)
+  const confirm = useConfirmationDialog()
   const detectedBrowsers = useAppStore((s) => s.detectedBrowsers)
   const switchBrowserTabProfile = useAppStore((s) => s.switchBrowserTabProfile)
   const createBrowserSessionProfile = useAppStore((s) => s.createBrowserSessionProfile)
@@ -209,7 +211,8 @@ export function BrowserToolbarMenu({
         {
           profileId: effectiveProfileId,
           executionHostId: result.executionHostId,
-          executionHostLabel: result.executionHostLabel
+          executionHostLabel: result.executionHostLabel,
+          confirm
         }
       )
     } else {
@@ -230,7 +233,8 @@ export function BrowserToolbarMenu({
         {
           profileId: effectiveProfileId,
           executionHostId: result.executionHostId,
-          executionHostLabel: result.executionHostLabel
+          executionHostLabel: result.executionHostLabel,
+          confirm
         }
       )
     } else if (result.reason !== 'canceled') {

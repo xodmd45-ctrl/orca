@@ -20,6 +20,7 @@ import {
   DropdownMenuTrigger
 } from '../ui/dropdown-menu'
 import { BrowserCookieImportDisclosure } from '../BrowserCookieImportDisclosure'
+import { useConfirmationDialog } from '../confirmation-dialog-context'
 import { useAppStore } from '../../store'
 import { BROWSER_FAMILY_LABELS } from '../../../../shared/constants'
 import { translate } from '@/i18n/i18n'
@@ -55,6 +56,7 @@ export function BrowserProfileRow({
 }: BrowserProfileRowProps): React.JSX.Element {
   const isImporting = importState?.profileId === profile.id && importState.status === 'importing'
   const [isClearingCookies, setIsClearingCookies] = useState(false)
+  const confirm = useConfirmationDialog()
   const fetchDetectedBrowsers = useAppStore((s) => s.fetchDetectedBrowsers)
 
   const handleImportFromBrowser = async (
@@ -91,7 +93,8 @@ export function BrowserProfileRow({
         {
           profileId: profile.id,
           executionHostId: result.executionHostId,
-          executionHostLabel: result.executionHostLabel
+          executionHostLabel: result.executionHostLabel,
+          confirm
         }
       )
     } else {
@@ -112,7 +115,8 @@ export function BrowserProfileRow({
         {
           profileId: profile.id,
           executionHostId: result.executionHostId,
-          executionHostLabel: result.executionHostLabel
+          executionHostLabel: result.executionHostLabel,
+          confirm
         }
       )
     } else if (result.reason !== 'canceled') {

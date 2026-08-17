@@ -1,6 +1,7 @@
 import { toast } from 'sonner'
 import type { BrowserCookieImportSummary } from '../../../shared/browser-workspace-types'
 import type { ExecutionHostId } from '../../../shared/execution-host'
+import type { ConfirmationDialogContextValue } from '@/components/confirmation-dialog-context'
 import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
 
@@ -10,6 +11,7 @@ type CookieImportToastTarget = {
   profileId: string
   executionHostId: ExecutionHostId
   executionHostLabel: string
+  confirm: ConfirmationDialogContextValue
 }
 
 function formatCookieImportWarning(warning: CookieImportWarning): string {
@@ -75,33 +77,53 @@ async function emitGoogleCookieImportWarning(
   const hasGoogleCookies = await useAppStore
     .getState()
     .hasBrowserProfileGoogleCookies(target.profileId, target.executionHostId)
+  const clearGoogleCookiesLabel = translate(
+    'auto.lib.browser.cookie.import.toast.clearGoogleCookies',
+    'Clear Google cookies'
+  )
   const clearAction = hasGoogleCookies
     ? {
         action: {
-          label: translate(
-            'auto.lib.browser.cookie.import.toast.clearGoogleCookies',
-            'Clear Google cookies'
-          ),
+          label: clearGoogleCookiesLabel,
           onClick: () => {
-            void useAppStore
-              .getState()
-              .clearBrowserProfileGoogleCookies(target.profileId, target.executionHostId)
-              .then((cleared) => {
-                if (cleared) {
-                  toast.success(
-                    translate(
-                      'auto.lib.browser.cookie.import.toast.googleCookiesCleared',
-                      'Google cookies cleared.'
-                    )
-                  )
-                } else {
-                  toast.error(
-                    translate(
-                      'auto.lib.browser.cookie.import.toast.googleCookiesClearFailed',
-                      'Failed to clear Google cookies.'
-                    )
-                  )
+            void target
+              .confirm({
+                title: translate(
+                  'auto.lib.browser.cookie.import.toast.googleCookiesClearConfirmTitle',
+                  'Clear Google cookies?'
+                ),
+                description: translate(
+                  'auto.lib.browser.cookie.import.toast.googleCookiesClearConfirmDescription',
+                  'This signs you out of Google in this browser profile on {{value0}}. Cookies for other sites are kept.',
+                  { value0: target.executionHostLabel }
+                ),
+                confirmLabel: clearGoogleCookiesLabel,
+                confirmVariant: 'destructive'
+              })
+              .then((confirmed) => {
+                if (!confirmed) {
+                  return
                 }
+                return useAppStore
+                  .getState()
+                  .clearBrowserProfileGoogleCookies(target.profileId, target.executionHostId)
+                  .then((cleared) => {
+                    if (cleared) {
+                      toast.success(
+                        translate(
+                          'auto.lib.browser.cookie.import.toast.googleCookiesCleared',
+                          'Google cookies cleared.'
+                        )
+                      )
+                    } else {
+                      toast.error(
+                        translate(
+                          'auto.lib.browser.cookie.import.toast.googleCookiesClearFailed',
+                          'Failed to clear Google cookies.'
+                        )
+                      )
+                    }
+                  })
               })
           }
         }
@@ -111,7 +133,7 @@ async function emitGoogleCookieImportWarning(
     hasGoogleCookies
       ? translate(
           'auto.lib.browser.cookie.import.toast.googleCookiesRecovery',
-          'Google cookies from an earlier import cannot be refreshed. Clear them before signing in directly in Orca on {{value0}}.',
+          'Google cookies were not imported. If Google sign-in is not working in this profile, clear its Google cookies, then sign in directly in Orca on {{value0}}.',
           { value0: target.executionHostLabel }
         )
       : translate(

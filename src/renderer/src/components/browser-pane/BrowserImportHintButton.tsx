@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import { emitBrowserCookieImportToast } from '@/lib/browser-cookie-import-toast'
 import { Button } from '@/components/ui/button'
 import { BrowserCookieImportDisclosure } from '@/components/BrowserCookieImportDisclosure'
+import { useConfirmationDialog } from '@/components/confirmation-dialog-context'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,6 +33,7 @@ export function BrowserImportHintButton({
 }: BrowserImportHintButtonProps): React.JSX.Element | null {
   const [open, setOpen] = useState(false)
   const [importMenuOpen, setImportMenuOpen] = useState(false)
+  const confirm = useConfirmationDialog()
   const browserSessionImportState = useAppStore((s) => s.browserSessionImportState)
   const browserImportHintHidden = useAppStore((s) => s.browserImportHintHidden)
   const persistedUIReady = useAppStore((s) => s.persistedUIReady)
@@ -105,14 +107,15 @@ export function BrowserImportHintButton({
           {
             profileId: effectiveProfileId,
             executionHostId: result.executionHostId,
-            executionHostLabel: result.executionHostLabel
+            executionHostLabel: result.executionHostLabel,
+            confirm
           }
         )
         return
       }
       toast.error(result.reason)
     },
-    [detectedBrowsers, effectiveProfileId, importCookiesFromBrowser]
+    [confirm, detectedBrowsers, effectiveProfileId, importCookiesFromBrowser]
   )
 
   const handleImportFromFile = useCallback(async (): Promise<void> => {
@@ -130,7 +133,8 @@ export function BrowserImportHintButton({
         {
           profileId: effectiveProfileId,
           executionHostId: result.executionHostId,
-          executionHostLabel: result.executionHostLabel
+          executionHostLabel: result.executionHostLabel,
+          confirm
         }
       )
       return
@@ -138,7 +142,7 @@ export function BrowserImportHintButton({
     if (result.reason !== 'canceled') {
       toast.error(result.reason)
     }
-  }, [effectiveProfileId, importCookiesToProfile])
+  }, [confirm, effectiveProfileId, importCookiesToProfile])
 
   const handleOpenBrowserSettings = useCallback((): void => {
     openSettingsTarget({ pane: 'browser', repoId: null })

@@ -105,7 +105,6 @@ export function registerBrowserSessionProfileHandlers(): void {
     return browserSessionRegistry.clearDefaultSessionCookies()
   })
 
-
   ipcMain.removeHandler('browser:session:hasGoogleCookies')
 
   ipcMain.handle(

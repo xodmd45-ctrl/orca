@@ -23,6 +23,9 @@ vi.mock('@/components/ui/popover', () => popoverStubs())
 vi.mock('@/components/ui/tooltip', () => tooltipStubs())
 vi.mock('./ui/tooltip', () => tooltipStubs())
 vi.mock('@/store', () => ({ useAppStore: appStoreStub() }))
+vi.mock('@/components/confirmation-dialog-context', () => ({
+  useConfirmationDialog: () => vi.fn().mockResolvedValue(true)
+}))
 vi.mock('../../store', () => ({ useAppStore: appStoreStub() }))
 vi.mock('sonner', () => ({ toast: { success: successToastMock, error: errorToastMock } }))
 
