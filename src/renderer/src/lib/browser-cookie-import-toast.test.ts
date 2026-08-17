@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const {
   clearBrowserProfileGoogleCookiesMock,
   confirmMock,
+  dismissToastMock,
   errorToastMock,
   hasBrowserProfileGoogleCookiesMock,
   successToastMock,
@@ -10,6 +11,7 @@ const {
 } = vi.hoisted(() => ({
   clearBrowserProfileGoogleCookiesMock: vi.fn(),
   confirmMock: vi.fn(),
+  dismissToastMock: vi.fn(),
   errorToastMock: vi.fn(),
   hasBrowserProfileGoogleCookiesMock: vi.fn(),
   successToastMock: vi.fn(),
@@ -26,8 +28,25 @@ vi.mock('@/store', () => ({
 }))
 
 vi.mock('sonner', () => ({
-  toast: { error: errorToastMock, success: successToastMock, warning: warningToastMock }
+  toast: {
+    dismiss: dismissToastMock,
+    error: errorToastMock,
+    success: successToastMock,
+    warning: warningToastMock
+  }
 }))
+
+// Why: sonner deletes the toast after the action's onClick unless it preventDefaults.
+function clickToastAction(): { preventDefault: ReturnType<typeof vi.fn> } {
+  const event = { preventDefault: vi.fn() }
+  warningToastMock.mock.calls[0]?.[1].action.onClick(event)
+  return event
+}
+
+// Why: the decline path is silent, so "nothing happened" needs the promise chain drained first.
+function flushPendingWork(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0))
+}
 
 import type { BrowserCookieImportSummary } from '../../../shared/browser-workspace-types'
 import { emitBrowserCookieImportToast } from './browser-cookie-import-toast'
@@ -64,10 +83,11 @@ describe('emitBrowserCookieImportToast', () => {
   beforeEach(() => {
     clearBrowserProfileGoogleCookiesMock.mockReset().mockResolvedValue(true)
     confirmMock.mockReset().mockResolvedValue(true)
+    dismissToastMock.mockReset()
     errorToastMock.mockReset()
     hasBrowserProfileGoogleCookiesMock.mockReset().mockResolvedValue(true)
     successToastMock.mockReset()
-    warningToastMock.mockReset()
+    warningToastMock.mockReset().mockReturnValue('google-cookie-toast')
   })
 
   it('shows the localized total-failure warning', () => {
@@ -193,7 +213,8 @@ describe('emitBrowserCookieImportToast', () => {
     )
 
     await vi.waitFor(() => expect(warningToastMock).toHaveBeenCalledOnce())
-    warningToastMock.mock.calls[0]?.[1].action.onClick()
+    const event = clickToastAction()
+    expect(event.preventDefault).toHaveBeenCalledOnce()
 
     await vi.waitFor(() =>
       expect(confirmMock).toHaveBeenCalledWith({
@@ -212,9 +233,10 @@ describe('emitBrowserCookieImportToast', () => {
     )
     expect(successToastMock).toHaveBeenLastCalledWith('Google cookies cleared.')
     expect(errorToastMock).not.toHaveBeenCalled()
+    expect(dismissToastMock).toHaveBeenCalledWith('google-cookie-toast')
   })
 
-  it('keeps Google cookies when the user cancels the destructive confirmation', async () => {
+  it('keeps Google cookies and the recovery toast when the user cancels the confirmation', async () => {
     confirmMock.mockResolvedValue(false)
     emitBrowserCookieImportToast(
       { ...summary, googleCookiesSkipped: 1 },
@@ -223,10 +245,13 @@ describe('emitBrowserCookieImportToast', () => {
     )
 
     await vi.waitFor(() => expect(warningToastMock).toHaveBeenCalledOnce())
-    warningToastMock.mock.calls[0]?.[1].action.onClick()
+    const event = clickToastAction()
+    expect(event.preventDefault).toHaveBeenCalledOnce()
 
     await vi.waitFor(() => expect(confirmMock).toHaveBeenCalledOnce())
+    await flushPendingWork()
     expect(clearBrowserProfileGoogleCookiesMock).not.toHaveBeenCalled()
+    expect(dismissToastMock).not.toHaveBeenCalled()
   })
 
   it('does not offer the action when the target profile has no Google cookies', async () => {
@@ -253,7 +278,7 @@ describe('emitBrowserCookieImportToast', () => {
     )
 
     await vi.waitFor(() => expect(warningToastMock).toHaveBeenCalledOnce())
-    warningToastMock.mock.calls[0]?.[1].action.onClick()
+    clickToastAction()
 
     await vi.waitFor(() =>
       expect(errorToastMock).toHaveBeenCalledWith('Failed to clear Google cookies.')
