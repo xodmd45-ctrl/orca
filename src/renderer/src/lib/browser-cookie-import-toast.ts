@@ -1,4 +1,4 @@
-import type { MouseEvent } from 'react'
+import type { MouseEvent as ReactMouseEvent } from 'react'
 import { toast } from 'sonner'
 import type { BrowserCookieImportSummary } from '../../../shared/browser-workspace-types'
 import type { ExecutionHostId } from '../../../shared/execution-host'
@@ -89,7 +89,7 @@ async function emitGoogleCookieImportWarning(
           label: clearGoogleCookiesLabel,
           // Why: sonner dismisses the toast on action click, so declining the confirmation would
           // destroy the only entry point to the recovery. Hold the toast until the clear runs.
-          onClick: (event: MouseEvent<HTMLButtonElement>) => {
+          onClick: (event: ReactMouseEvent<HTMLButtonElement>) => {
             event.preventDefault()
             void target
               .confirm({
@@ -109,15 +109,17 @@ async function emitGoogleCookieImportWarning(
                 if (!confirmed) {
                   return
                 }
-                // Why: sonner's dismiss() with no id closes every toast, including the success below.
-                if (toastId !== undefined) {
-                  toast.dismiss(toastId)
-                }
                 return useAppStore
                   .getState()
                   .clearBrowserProfileGoogleCookies(target.profileId, target.executionHostId)
                   .then((cleared) => {
                     if (cleared) {
+                      // Why: only a successful clear makes the recovery advice stale; a failure
+                      // must leave the action on screen so the user can retry it.
+                      // sonner's dismiss() with no id would close every toast, so guard the id.
+                      if (toastId !== undefined) {
+                        toast.dismiss(toastId)
+                      }
                       toast.success(
                         translate(
                           'auto.lib.browser.cookie.import.toast.googleCookiesCleared',

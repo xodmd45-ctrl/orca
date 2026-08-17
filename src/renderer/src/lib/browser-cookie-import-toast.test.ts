@@ -283,5 +283,7 @@ describe('emitBrowserCookieImportToast', () => {
     await vi.waitFor(() =>
       expect(errorToastMock).toHaveBeenCalledWith('Failed to clear Google cookies.')
     )
+    // Why: a failed clear must leave the action on screen so the user can retry it.
+    expect(dismissToastMock).not.toHaveBeenCalled()
   })
 })
