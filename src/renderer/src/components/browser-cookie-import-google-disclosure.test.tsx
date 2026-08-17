@@ -11,11 +11,13 @@ import en from '@/i18n/locales/en.json'
 
 const DISCLOSURE_TITLE = "Google logins aren't imported"
 const DISCLOSURE_DESCRIPTION = 'Sign in to Google directly in Orca.'
-const { clearDefaultSessionCookiesMock, errorToastMock, successToastMock } = vi.hoisted(() => ({
-  clearDefaultSessionCookiesMock: vi.fn(),
-  errorToastMock: vi.fn(),
-  successToastMock: vi.fn()
-}))
+const { clearDefaultSessionCookiesMock, confirmMock, errorToastMock, successToastMock } =
+  vi.hoisted(() => ({
+    clearDefaultSessionCookiesMock: vi.fn(),
+    confirmMock: vi.fn(),
+    errorToastMock: vi.fn(),
+    successToastMock: vi.fn()
+  }))
 
 vi.mock('@/components/ui/dropdown-menu', () => dropdownMenuStubs())
 vi.mock('../ui/dropdown-menu', () => dropdownMenuStubs())
@@ -23,8 +25,9 @@ vi.mock('@/components/ui/popover', () => popoverStubs())
 vi.mock('@/components/ui/tooltip', () => tooltipStubs())
 vi.mock('./ui/tooltip', () => tooltipStubs())
 vi.mock('@/store', () => ({ useAppStore: appStoreStub() }))
+// Why: the real hook returns a useCallback-stable value; a fresh fn per render would break deps.
 vi.mock('@/components/confirmation-dialog-context', () => ({
-  useConfirmationDialog: () => vi.fn().mockResolvedValue(true)
+  useConfirmationDialog: () => confirmMock
 }))
 vi.mock('../../store', () => ({ useAppStore: appStoreStub() }))
 vi.mock('sonner', () => ({ toast: { success: successToastMock, error: errorToastMock } }))
@@ -50,6 +53,7 @@ describe('cookie-import Google disclosure footer', () => {
 
   beforeEach(() => {
     clearDefaultSessionCookiesMock.mockReset().mockResolvedValue(true)
+    confirmMock.mockReset().mockResolvedValue(true)
     errorToastMock.mockReset()
     successToastMock.mockReset()
     container = document.createElement('div')
