@@ -88,9 +88,8 @@ async function emitGoogleCookieImportWarning(
     ? {
         action: {
           label: clearGoogleCookiesLabel,
-          // Why: sonner dismisses the toast on action click, so declining the confirmation would
-          // destroy the only entry point to the recovery. Hold the toast until the clear succeeds;
-          // because it survives, guard against a second click stacking a second prompt.
+          // Why: sonner deletes the toast on action click unless it preventDefaults, so declining
+          // the confirmation would destroy the only entry point. Surviving means guarding re-entry.
           onClick: (event: ReactMouseEvent<HTMLButtonElement>) => {
             event.preventDefault()
             if (clearPending) {
@@ -120,9 +119,8 @@ async function emitGoogleCookieImportWarning(
                   .clearBrowserProfileGoogleCookies(target.profileId, target.executionHostId)
                   .then((cleared) => {
                     if (cleared) {
-                      // Why: only a successful clear makes the recovery advice stale; a failure
-                      // must leave the action on screen so the user can retry it.
-                      // sonner's dismiss() with no id would close every toast, so guard the id.
+                      // Why: only success makes the advice stale — a failure keeps the retry
+                      // affordance. Guard the id: sonner's dismiss() with none closes every toast.
                       if (toastId !== undefined) {
                         toast.dismiss(toastId)
                       }
